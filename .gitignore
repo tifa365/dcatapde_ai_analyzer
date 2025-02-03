@@ -1,3 +1,25 @@
+README.md
+
+
+
+/archiv
+/__pycache__
 /.quarto/
 .DS_Store
 *.pyc
+
+
+# Scripts
+01_load_ckan_data_berlin.ipynb
+02_mdv_eda_dcat.ipynb
+
+01_mdv_eda copy.ipynb
+01_dataset_metadata.csv
+get_all_datasets.ipynb
+combined_notebook.ipynb
+
+
+# Datasets
+notebooks/01_dataset_metadata.csv
+notebooks/01_dataset_metadata.parquet
+notebooks/metadata.parquet

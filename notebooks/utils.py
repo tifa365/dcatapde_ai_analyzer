@@ -11,7 +11,8 @@ openai_client = OpenAI()
 OPENAI_SYSTEM_MESSAGE = """"You are a helpful assistant."""
 
 
-def call_openai(prompt, modelId="gpt-4o", temperature=0.5, max_tokens=4096):
+# Using the currently most cheap but capable AI model GPT4o-Mini
+def call_openai(prompt, modelId="gpt-4o-mini", temperature=0.5, max_tokens=4096):
     try:
         completion = openai_client.chat.completions.create(
             model=modelId,
@@ -66,8 +67,8 @@ Prüfe bei jedem Punkt auch, ob es Auffälligkeiten oder Anomalien gibt und benn
 
 Hier ein Beispiel:
 
-    Titel: Web Analytics der Open Government Data des Kantons Zürich auf opendata.swiss von Februar 2018 bis Februar 2021
-    Beschreibung: Monatliche Nutzungsstatistiken (Anzahl Besuche) der Open Government Data (OGD) Metadatensätze von Verwaltungseinheiten und Organen des Kantons Zürich, die auf dem zentralen Katalog für offene Behördendaten opendata.swiss findbar sind. Hinweise: Ab Januar 2019 sind die Web Analytics um weitere Metadateninformationen erweitert bzw. wurden Metadatenanpassungen vorgenommen. Ab März 2021 sind die monatlichen Aktualisierungen aufgrund technischer Herausforderungen pausiert. Variablendefinitionen: Column 'name' = dataset slug; 'issued' = first publication of dataset; 'organization_name' = publisher slug; 'organization_url' = publisher URL; 'E' up to 'AB' = thematic categories according to DCAT AP Switzerland.
+    Titel: Web Analytics der Open Government Data des Landes Berlin auf daten.berlin.de von Januar 2019 bis Dezember 2021
+    Beschreibung: Monatliche Nutzungsstatistiken (Anzahl Besuche) der Open Government Data (OGD) Metadatensätze von Berliner Verwaltungseinheiten, die im zentralen Katalog für offene Daten daten.berlin.de verfügbar sind. Hinweise: Ab Januar 2020 wurden die Web Analytics um zusätzliche Metadateninformationen erweitert und es fanden Anpassungen der Metadaten statt. Ab Januar 2022 sind die monatlichen Aktualisierungen aufgrund technischer Herausforderungen vorübergehend ausgesetzt. Variablendefinitionen: Spalte 'name' = Dataset-Slug; 'issued' = Erstveröffentlichung des Datensatzes; 'organization_name' = Slug der Herausgeberorganisation; 'organization_url' = URL der Herausgeberorganisation; 'E' bis 'AB' = thematische Kategorien gemäß DCAT AP Deutschland.
 
     Dateninhalt: Detaillierte und eindeutige Erklärung, worum es in dem Datensatz geht.
     Methodik: Detaillierte und eindeutige Erklärung, wie die Daten gemessen wurden und wofür. Variablendefinitionen sind klar und detailliert. -> 4 Punkte
@@ -123,7 +124,7 @@ Beschreibung: {description}
 def do_full_analysis(data):
     """Check the titles and descriptions of each dataset individually."""
     return call_openai(
-        PROMPT_ANALYSIS.format(title=data.title, description=data.description)
+        PROMPT_ANALYSIS.format(title=data["title"], description=data["notes"])
     )
 
 
@@ -198,27 +199,108 @@ def parse_analysis_results(results):
 
 # Data derived from the DCAT-AP.de specification here:
 # https://www.dcat-ap.de/def/dcatde/2.0/spec/#klasse-katalog
+# Updated data derived from the DCAT-AP.de specification for the Dataset class
+
+# Explanation:
+#
+# Obligation is mapped directly from the German column "Verbindlichkeit":
+#     Pflicht → "M" (Mandatory)
+#     Empfohlen → "R" (Recommended)
+#     Optional → "O" (Optional)
+# Cardinality (the fifth element in each tuple) matches the [x..y] in the table exactly, for example:
+#     [1..*] → "1..*"
+#     [*] → "*"
+#     [0..1] → "0..1"
+
 DCAT_CLASS_DATASET = [
-    ("title", "dct:title", "rdfs:Literal", "M", "1..*"),
-    ("description", "dct:description", "rdfs:Literal", "M", "1..*"),
-    ("dataset", "dcat:dataset", "dcat:Dataset", "M", "1..*"),
-    ("publisher", "dct:publisher", "foaf:Agent", "M", "1"),
-    ("release date", "dct:issued", "rdfs:Literal", "R", "0..1"),
-    ("update/ modification date", "dct:modified", "rdfs:Literal", "R", "0..1"),
-    ("language", "dct:language", "dct:LinguisticSystem", "R", "*"),
-    ("homepage", "foaf:homepage", "foaf:Document", "R", "0..1"),
-    ("license", "dct:license", "dct:LicenseDocument", "R", "0..1"),
-    ("theme taxonomy", "dcat:themeTaxonomy", "skos:ConceptScheme", "R", "*"),
-    ("availability", "dcatap:availability", "skos:Concept", "R", "0..1"),
-    ("spatial/ geographical coverage", "dct:spatial", "dct:Location", "R", "*"),
-    ("rights", "dct:rights", "dct:RightsStatement", "O", "0..1"),
-    ("catalog", "dcat:catalog", "dcat:Catalog", "O", "*"),
-    ("data service", "dcat:service", "dcat:DataService", "O", "*"),
-    ("has part", "dct:hasPart", "dcat:Catalog", "O", "*"),
-    ("is part of", "dct:isPartOf", "dcat:Catalog", "O", "0..1"),
-    ("record", "dcat:record", "dcat:CatalogRecord", "O", "*"),
-    ("creator", "dct:creator", "foaf:Agent", "O", "*"),
+    # ----------------------------------------------------------------
+    # MANDATORY (Pflicht)
+    # ----------------------------------------------------------------
+    ("Title", "dct:title", "rdfs:Literal", "M", "1..*"),
+    ("Description", "dct:description", "rdfs:Literal", "M", "1..*"),
+    # ----------------------------------------------------------------
+    # RECOMMENDED (Empfohlen)
+    # ----------------------------------------------------------------
+    ("Keyword", "dcat:keyword", "rdfs:Literal", "R", "*"),
+    (
+        "Political Geocoding Level URI",
+        "dcatde:politicalGeocodingLevelURI",
+        "rdfs:Resource",
+        "R",
+        "*",
+    ),
+    (
+        "Political Geocoding URI",
+        "dcatde:politicalGeocodingURI",
+        "rdfs:Resource",
+        "R",
+        "*",
+    ),
+    ("Theme (Category)", "dcat:theme", "skos:Concept", "R", "*"),
+    ("Contact Point", "dcat:contactPoint", "vcard:Kind", "R", "*"),
+    ("Availability", "dcatap:availability", "skos:Concept", "R", "0..1"),
+    ("Spatial Coverage", "dct:spatial", "dct:Location", "R", "*"),
+    ("Temporal Coverage", "dct:temporal", "dct:PeriodOfTime", "R", "*"),
+    ("Distribution", "dcat:distribution", "dcat:Distribution", "R", "*"),
+    ("Publisher", "dct:publisher", "foaf:Agent", "R", "0..1"),
+    # ----------------------------------------------------------------
+    # OPTIONAL (Optional)
+    # ----------------------------------------------------------------
+    ("Contributor ID", "dcatde:contributorID", "rdfs:Resource", "O", "*"),
+    ("Geocoding Description", "dcatde:geocodingDescription", "rdfs:Literal", "O", "*"),
+    ("Identifier", "dct:identifier", "rdfs:Literal", "O", "*"),
+    ("Other ID", "adms:identifier", "adms:Identifier", "O", "*"),
+    ("Issued (Publication Date)", "dct:issued", "rdfs:Literal", "O", "0..1"),
+    ("Modified (Update Date)", "dct:modified", "rdfs:Literal", "O", "0..1"),
+    ("Version Info", "owl:versionInfo", "rdfs:Literal", "O", "0..1"),
+    ("Version Notes", "adms:versionNotes", "rdfs:Literal", "O", "*"),
+    ("Legal Basis", "dcatde:legalBasis", "rdfs:Literal", "O", "*"),
+    ("Related Resource", "dct:relation", "rdfs:Resource", "O", "*"),
+    ("Landing Page", "dcat:landingPage", "foaf:Document", "O", "*"),
+    ("Documentation Page", "foaf:page", "foaf:Document", "O", "*"),
+    ("Language", "dct:language", "dct:LinguisticSystem", "O", "*"),
+    ("Conforms To (Standard)", "dct:conformsTo", "dct:Standard", "O", "*"),
+    ("Access Rights Level", "dct:accessRights", "dct:RightsStatement", "O", "0..1"),
+    ("Provenance", "dct:provenance", "dct:ProvenanceStatement", "O", "*"),
+    ("Accrual Periodicity", "dct:accrualPeriodicity", "dct:Frequency", "O", "0..1"),
+    ("Quality Process URI", "dcatde:qualityProcessURI", "rdfs:Resource", "O", "0..1"),
+    ("Dataset Type", "dct:type", "skos:Concept", "O", "0..1"),
+    ("Was Generated By", "prov:wasGeneratedBy", "prov:Activity", "O", "*"),
+    (
+        "Spatial Resolution in Meters",
+        "dcat:spatialResolutionInMeters",
+        "rdfs:Literal",
+        "O",
+        "*",
+    ),
+    ("Temporal Resolution", "dcat:temporalResolution", "rdfs:Literal", "O", "*"),
+    (
+        "Temporal Granularity (DEPRECATED)",
+        "dcat:granularity",
+        "skos:Concept",
+        "O",
+        "0..1",
+    ),
+    (
+        "Qualified Attribution",
+        "prov:qualifiedAttribution",
+        "prov:Attribution",
+        "O",
+        "*",
+    ),
+    ("Qualified Relation", "dcat:qualifiedRelation", "dcat:Relationship", "O", "*"),
+    ("Is Referenced By", "dct:isReferencedBy", "rdfs:Resource", "O", "*"),
+    ("References", "dct:references", "rdfs:Resource", "O", "*"),
+    ("Source Dataset", "dct:source", "dcat:Dataset", "O", "*"),
+    ("Has Version", "dct:hasVersion", "dcat:Dataset", "O", "*"),
+    ("Is Version Of", "dct:isVersionOf", "dcat:Dataset", "O", "*"),
+    ("Sample Distribution", "adms:sample", "dcat:Distribution", "O", "*"),
+    ("Creator (Author)", "dct:creator", "foaf:Agent", "O", "*"),
+    ("Contributor (Editor)", "dct:contributor", "foaf:Agent", "O", "*"),
+    ("Originator", "dcatde:originator", "foaf:Agent", "O", "*"),
+    ("Maintainer", "dcatde:maintainer", "foaf:Agent", "O", "*"),
 ]
+
 
 # https://www.dcat-ap.de/def/dcatde/2.0/spec/#klasse-distribution
 DCAT_CLASS_DISTRIBUTION = data = [
